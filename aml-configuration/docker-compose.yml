@@ -1,0 +1,97 @@
+version: '3'
+
+# sops exec-env .enc.env 'docker-compose up'
+# curl 'localhost:8080/aml-service/swagger/index.html'
+
+# services also use /mnt/share/Progam/Common
+# CIFS_LOGS_AML=//172.17.146.72/Galaxis/Log/AML_Service
+# CIFS_LOGS_API=//172.17.146.72/Galaxis/Log/API
+# CIFS_LOGS_NS=//172.17.146.72/Galaxis/Log/Notification_Service
+# swagger paths had to be changed to relative paths for api documentation to show up behind nginx reverse proxy.
+# ro paths ?
+
+x-common-env: &common-env
+    MSG__BROKER__ADDRESS: ${MSG__BROKER__ADDRESS:?err}
+    MSG__BROKER__USERNAME: ${MSG__BROKER__USERNAME:?err}
+    MSG__BROKER__PASSWORD: "${MSG__BROKER__PASSWORD:?err}"
+    DB__AML__USERNAME: "${DB__AML__USERNAME:?err}"
+    DB__AML__PASSWORD: "${DB__AML__PASSWORD:?err}"
+    DB__AML__DATASOURCE: "${DB__AML__DATASOURCE:?err}"
+    GALAXIS_HOME: "${GALAXIS_HOME:?err}"
+    CIFS_GLX: "${CIFS_GLX:?err}"
+    CIFS_DOMAIN: "${CIFS_DOMAIN:?err}"
+    CIFS_USERNAME: "${CIFS_USERNAME:?err}"
+    CIFS_PASSWORD: "${CIFS_PASSWORD:?err}"
+
+services:
+    nginx:
+        image: nginx:1.22.0
+        container_name: nginx
+        restart: always
+        pull_policy: always
+        ports:
+            - "4445:4445"
+        volumes:
+            - ./nginx-configuration/modulus/:/etc/modulus/
+            - ./nginx-configuration/conf/nginx.conf:/etc/nginx/nginx.conf
+        networks:
+        - internal-network
+
+    aml-service:
+        image: 172.17.145.37/aml/amlservice:1.0.1.177
+        container_name: aml-service
+        depends_on:
+            - nginx
+        restart: always
+        pull_policy: always
+        environment:
+            <<: *common-env
+        ports:
+            - '5003:5003'
+        volumes:
+          - cifs_mount:/mnt/share:rw
+        networks:
+        - internal-network
+
+    glx-api-service:
+        image: 172.17.145.37/glx-api/service:1.0.1.32
+        container_name: glx-api-service
+        depends_on:
+           - nginx
+        restart: always
+        pull_policy: always
+        environment:
+            <<: *common-env
+        ports:
+           - '5004:5004'
+        volumes:
+          - cifs_mount:/mnt/share:rw
+        networks:
+        - internal-network
+
+    notification-service:
+        image: 172.17.145.37/ns-service/ns:1.1.0.23
+        container_name: notification-service
+        depends_on:
+           - nginx
+        restart: always
+        pull_policy: always
+        environment:
+            <<: *common-env
+        ports:
+           - '5005:5005'
+        volumes:
+          - cifs_mount:/mnt/share:rw
+        networks:
+        - internal-network
+
+volumes:
+    cifs_mount:
+        driver: local
+        driver_opts:
+            type: cifs
+            device: "${CIFS_GLX:?err}"
+            o: "domain=${CIFS_DOMAIN:?err},username=${CIFS_USERNAME:?err},password=${CIFS_PASSWORD:?err},rw"
+
+networks:
+  internal-network:

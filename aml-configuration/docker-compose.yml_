@@ -1,0 +1,79 @@
+version: '3'
+
+# curl 'localhost:8080/aml-service/swagger/index.html'
+
+services:
+    nginx:
+        image: nginx
+        container_name: nginx
+        restart: always
+        pull_policy: always
+        ports:
+            - "8080:80"
+        volumes:
+            - ./nginx.conf:/etc/nginx/nginx.conf
+        networks:
+        - internal-network
+
+    aml-service:
+        image: 172.17.145.37/aml/amlservice:latest
+        container_name: aml-service
+        depends_on:
+            - nginx
+        restart: always
+        pull_policy: always
+        env_file: .env
+        ports:
+            - '5003:5003'
+        volumes:
+          - cifs_mount:/mnt/share:rw
+        networks:
+        - internal-network
+
+    glx-api-service:
+        image: 172.17.145.37/glx-api/service:latest
+        container_name: glx-api-service
+        depends_on:
+           - nginx
+        restart: always
+        pull_policy: always
+        env_file: .env
+        ports:
+           - '5004:5004'
+        volumes:
+          - cifs_mount:/mnt/share:rw
+        networks:
+        - internal-network
+
+    notification-service:
+        image: 172.17.145.37/ns-service/ns:latest
+        container_name: notification-service
+        depends_on:
+           - nginx
+        restart: always
+        pull_policy: always
+        env_file: .env
+        ports:
+           - '5005:5005'
+        volumes:
+          - cifs_mount:/mnt/share:rw
+        networks:
+        - internal-network
+
+# Utilise aussi /mnt/share/Progam/Common
+# CIFS_LOGS_AML=//172.17.146.72/Galaxis/Log/AML_Service
+# CIFS_LOGS_API=//172.17.146.72/Galaxis/Log/API
+# CIFS_LOGS_NS=//172.17.146.72/Galaxis/Log/Notification_Service
+# swagger paths had to be changed to relative paths for api documentation to show up behind nginx reverse proxy.
+# ro paths, swagger not working glx-api and notification-service
+
+volumes:
+    cifs_mount:
+        driver: local
+        driver_opts:
+            type: cifs
+            device: "${CIFS_GLX}"
+            o: "domain=${CIFS_DOMAIN},username=${CIFS_USERNAME},password=${CIFS_PASSWORD},rw"
+
+networks:
+  internal-network:
